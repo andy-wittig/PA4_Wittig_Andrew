@@ -123,6 +123,13 @@ void myfree(void* ptr)
 {
     //Performs a basic santity check with respect to virtual memory bounds by checking whether the address of the block to be freed is
     //greater than the head of the Memorylist, and lesser than the current program break.
+    if (ptr == NULL) { return; }
+    if (ptr < (void*)memoryList.head || ptr >= (void*)sbrk(0))
+    { 
+        printf("Error, the pointer given was out of bounds!");
+        return; 
+    }
+    
 }
 
 mblock_t* findLastMemlistBlock() //Traverses Memorylist to find the last Memory Block.
@@ -188,8 +195,33 @@ void coallesceBlockNext(mblock_t * freedBlock)
 //Increase the Heap allocation and create a new Memory Block in the Virutal Address Space which was reserved. Attach it to the Memorylist.
 mblock_t* growHeapBySize(size_t size)
 {
-    breakSize = max()
-    sbrk();
+    size_t breakSize = max(size + MBLOCK_HEADER_SZ, 1000);
+    void* prevBreakPoint = sbrk(breakSize); //Takes in increments in bytes for arguement.
+
+    if (prevBreakPoint == (void*)-1)
+    {
+        printf("There was an error using sbrk(): %s\n", strerror(errno));
+        return NULL;
+    }
+
+    mblock_t* lastBlock = findLastMemlistBlock();
+    mblock_t* newBlock = (mblock_t*)prevBreakPoint;
+
+    newBlock->size = breakSize - MBLOCK_HEADER_SZ;
+    newBlock->next = NULL;
+    newBlock->prev = lastBlock;
+    newBlock->status = 0;
+    newBlock->payload = (void*)((char*)newBlock + MBLOCK_HEADER_SZ);
+    
+    if (lastBlock != null)
+    {
+        lastBlock->next = newBlock;
+    }
+    else
+    {
+        memoryList.head = newBlock;
+    }
+    return newBlock;
 }
 
 size_t max(size_t a, size_t b)
