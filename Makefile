@@ -1,13 +1,13 @@
 CC = gcc
 CFLAGS = -Wall -g -pedantic
 
-all: sched
+all: mymalloc
 
-sched: sched.o
-	$(CC) $(CFLAGS) sched.o -o sched
+mymalloc: mymalloc.o
+	$(CC) $(CFLAGS) mymalloc.o -o mymalloc
 
-sched.o: sched.c
-	$(CC) $(CFLAGS) -c sched.c
+mymalloc.o: mymalloc.c
+	$(CC) $(CFLAGS) -c mymalloc.c
 
 clean:
-	rm -f sched sched.o
+	rm -f mymalloc mymalloc.o
