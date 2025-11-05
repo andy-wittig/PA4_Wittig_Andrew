@@ -122,11 +122,11 @@ void* mymalloc (size_t size)
         newBlock = growHeapBySize(size);
         if (newBlock == NULL) { return NULL; }
 
+        newBlock->status = 1;
         if (newBlock->size > size + MBLOCK_HEADER_SZ)
         { //There is extra room split block into seperate allocated and unallocated memory blocks.
             splitBlockAtSize(newBlock, size);
         }
-        newBlock->status = 1;
     }
 
     return newBlock->payload;
@@ -152,15 +152,8 @@ void myfree(void* ptr)
     freedBlock->status = 0;
 
     //Must combine adjacent empty blocks to efficiently use space.
-    mblock_t* prevBlock = freedBlock->prev
-    if (prevBlock && prevBlock->stats == 0)
-    {
-        coallesceBlockPrev(freedBlock);
-    }
-    else
-    {
-        coallesceBlockNext(freedBlock);
-    }
+    coallesceBlockPrev(&freedBlock); //Ensures freedBlock address is updated
+    coallesceBlockNext(freedBlock);
 }
 
 mblock_t* findLastMemlistBlock() //Traverses Memorylist to find the last Memory Block.
@@ -199,6 +192,8 @@ mblock_t* findFreeBlockOfSize(size_t size) //Traverse Memorylist to find the fir
 //and the second one getting whatever remains. Makes sure the Memorylist structure is kept up-to-date
 void splitBlockAtSize(mblock_t * block, size_t newSize)
 {
+    if (block->size < newSize + MBLOCK_HEADER_SZ + 1) return;
+
     mblock_t* nextBlock = block->next;
 
     mblock_t* remainingBlock = (mblock_t*)((char*)block + MBLOCK_HEADER_SZ + newSize);
@@ -214,21 +209,24 @@ void splitBlockAtSize(mblock_t * block, size_t newSize)
     if (nextBlock != NULL) { nextBlock->prev = remainingBlock; }
 }
 //Coalesce a Memory Block with the previous one in the Memorylist (assuming it is Free). Makes sure the Memorylist structure is kept up-to-date.
-void coallesceBlockPrev(mblock_t * freedBlock)
+void coallesceBlockPrev(mblock_t ** freedBlock)
 {
-    if (freedBlock == NULL) { return; }
+    if (*freedBlock == NULL) { return; }
 
-    mblock_t* prevBlock = freedBlock->prev;
+    mblock_t* currentBlock = *freedBlock;
+    mblock_t* prevBlock = currentBlock->prev;
 
     if (prevBlock == NULL || prevBlock->status != 0) { return; } //The previous block doesn't exist or isn't free.
     
-    prevBlock->size += MBLOCK_HEADER_SZ + freedBlock->size;
+    prevBlock->size += MBLOCK_HEADER_SZ + currentBlock->size;
 
-    prevBlock->next = freedBlock->next; //Unlink adjacent block from list
-    if (freedBlock->next != NULL)
+    prevBlock->next = currentBlock->next; //Unlink adjacent block from list
+    if (currentBlock->next != NULL)
     {
-        freedBlock->next->prev = prevBlock;
+        currentBlock->next->prev = prevBlock;
     }
+
+    *freedBlock = prevBlock;
 }
 //Coalesce a Memory Block with the next one in the Memorylist (assuming it is Free). Makes sure the Memorylist structure is kept up-to-date.
 void coallesceBlockNext(mblock_t * freedBlock)
@@ -247,7 +245,7 @@ void coallesceBlockNext(mblock_t * freedBlock)
         nextBlock->next->prev = freedBlock;
     }
 }
-//Increase the Heap allocation and create a new Memory Block in the Virutal Address Space which was reserved. Attach it to the Memorylist.
+//Increase the Heap allocation and create a new Memory Block in the Virtual Address Space which was reserved. Attach it to the Memorylist.
 mblock_t* growHeapBySize(size_t size)
 {
     size_t breakSize = max(size + MBLOCK_HEADER_SZ, 1000);
