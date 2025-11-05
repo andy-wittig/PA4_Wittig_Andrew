@@ -120,7 +120,7 @@ void* mymalloc (size_t size)
 }
 
 void myfree(void* ptr)
-{
+{ //Pointer to Virtual Address location which was previously allocated and should now be Deallocated.
     //Performs a basic santity check with respect to virtual memory bounds by checking whether the address of the block to be freed is
     //greater than the head of the Memorylist, and lesser than the current program break.
     if (ptr == NULL) { return; }
@@ -129,7 +129,12 @@ void myfree(void* ptr)
         printf("Error, the pointer given was out of bounds!");
         return; 
     }
-    
+
+    mblock_t* freedBlock = (mblock_t*)((char*)ptr - MBLOCK_HEADER_SZ);
+
+    //Must free space if no adjacent empty blocks
+    if (freedBlock->prev->status == 0) { coallesceBlockPrev(freedBlock); }
+    if (freedBlock->next->status == 0) { coallesceBlockNext(freedBlock); }
 }
 
 mblock_t* findLastMemlistBlock() //Traverses Memorylist to find the last Memory Block.
