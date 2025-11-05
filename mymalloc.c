@@ -9,21 +9,8 @@
 #include <errno.h>
 #include <sys/stat.h>
 
-//----------
-//Function Definitions
-void* mymalloc (size_t size);
-void myfree(void* ptr);
-
-mblock_t* findLastMemlistBlock();
-mblock_t* findFreeBlockOfSize(size_t size);
-void splitBlockAtSize(mblock_t * block, size_t newSize);
-void coallesceBlockPrev(mblock_t * freedBlock);
-void coallesceBlockNext(mblock_t * freedBlock);
-mblock_t* growHeapBySize(size_t size);
-
-void printMemList(const mblock_t* headptr);
-//----------
 //Memory Block Definitions
+//----------
 typedef struct _mblock_t {
   struct _mblock_t * prev;
   struct _mblock_t * next;
@@ -36,15 +23,32 @@ typedef struct _mlist_t {
     mblock_t * head;
 } mlist_t;
 //----------
+//Function Definitions
+//----------
+void* mymalloc (size_t size);
+void myfree(void* ptr);
+
+mblock_t* findLastMemlistBlock();
+mblock_t* findFreeBlockOfSize(size_t size);
+void splitBlockAtSize(mblock_t * block, size_t newSize);
+void coallesceBlockPrev(mblock_t * freedBlock);
+void coallesceBlockNext(mblock_t * freedBlock);
+mblock_t* growHeapBySize(size_t size);
+
+void printMemList(const mblock_t* headptr);
+//----------
 
 mlist_t memoryList;
 
 #define MBLOCK_HEADER_SZ offsetof(mblock_t, payload)
 
+size_t max(size_t a, size_t b)
+{
+    return (a > b) ? a : b;
+}
+
 int main (int argc, char* argv[])
 {
-    //TODO: Test other sequences of events to ensure no errors occur!
-
     /*
     printMemList - Sets up a data structure that represents a doubly linked list of memory blocks.
         size: size of block in bytes
@@ -110,13 +114,22 @@ void* mymalloc (size_t size)
     //Newly allocated data should be placed at MBLOCK_HEADER_SZ
     //Size of entire free block is mblock_t.size + MBLOCK_HEADER_SZ
 
-    mblock_t firstFreeBlock = findFreeBlockOfSize(size);
-    if (firstFreeBlock == NULL)
+    if (size <= 0) { return NULL; }
+
+    mblock_t* newBlock = findFreeBlockOfSize(size);
+    if (newBlock == NULL)
     { //There was no free memory for this size, so grow the heap.
-        growHeapBySize(size);
+        newBlock = growHeapBySize(size);
+        if (newBlock == NULL) { return NULL; }
+
+        if (newBlock->size > size + MBLOCK_HEADER_SZ)
+        { //There is extra room split block into seperate allocated and unallocated memory blocks.
+            splitBlockAtSize(newBlock, size);
+        }
+        newBlock->status = 1;
     }
 
-    return NULL;
+    return newBlock->payload;
 }
 
 void myfree(void* ptr)
@@ -126,15 +139,28 @@ void myfree(void* ptr)
     if (ptr == NULL) { return; }
     if (ptr < (void*)memoryList.head || ptr >= (void*)sbrk(0))
     { 
-        printf("Error, the pointer given was out of bounds!");
+        printf("Error, the pointer given was out of bounds!\n");
         return; 
     }
 
     mblock_t* freedBlock = (mblock_t*)((char*)ptr - MBLOCK_HEADER_SZ);
+    if (freedBlock->status == 0)
+    {
+        printf("Error, this block has already been freed!\n");
+        return;
+    }
+    freedBlock->status = 0;
 
-    //Must free space if no adjacent empty blocks
-    if (freedBlock->prev->status == 0) { coallesceBlockPrev(freedBlock); }
-    if (freedBlock->next->status == 0) { coallesceBlockNext(freedBlock); }
+    //Must combine adjacent empty blocks to efficiently use space.
+    mblock_t* prevBlock = freedBlock->prev
+    if (prevBlock && prevBlock->stats == 0)
+    {
+        coallesceBlockPrev(freedBlock);
+    }
+    else
+    {
+        coallesceBlockNext(freedBlock);
+    }
 }
 
 mblock_t* findLastMemlistBlock() //Traverses Memorylist to find the last Memory Block.
@@ -190,12 +216,36 @@ void splitBlockAtSize(mblock_t * block, size_t newSize)
 //Coalesce a Memory Block with the previous one in the Memorylist (assuming it is Free). Makes sure the Memorylist structure is kept up-to-date.
 void coallesceBlockPrev(mblock_t * freedBlock)
 {
+    if (freedBlock == NULL) { return; }
 
+    mblock_t* prevBlock = freedBlock->prev;
+
+    if (prevBlock == NULL || prevBlock->status != 0) { return; } //The previous block doesn't exist or isn't free.
+    
+    prevBlock->size += MBLOCK_HEADER_SZ + freedBlock->size;
+
+    prevBlock->next = freedBlock->next; //Unlink adjacent block from list
+    if (freedBlock->next != NULL)
+    {
+        freedBlock->next->prev = prevBlock;
+    }
 }
 //Coalesce a Memory Block with the next one in the Memorylist (assuming it is Free). Makes sure the Memorylist structure is kept up-to-date.
 void coallesceBlockNext(mblock_t * freedBlock)
 {
- 
+    if (freedBlock == NULL) { return; }
+
+    mblock_t* nextBlock = freedBlock->next;
+
+    if (nextBlock == NULL || nextBlock->status != 0) { return; } //The next block doesn't exist or isn't free.
+    
+    freedBlock->size += MBLOCK_HEADER_SZ + nextBlock->size;
+
+    freedBlock->next = nextBlock->next; //Unlink adjacent block from list
+    if (nextBlock->next != NULL)
+    {
+        nextBlock->next->prev = freedBlock;
+    }
 }
 //Increase the Heap allocation and create a new Memory Block in the Virutal Address Space which was reserved. Attach it to the Memorylist.
 mblock_t* growHeapBySize(size_t size)
@@ -218,7 +268,7 @@ mblock_t* growHeapBySize(size_t size)
     newBlock->status = 0;
     newBlock->payload = (void*)((char*)newBlock + MBLOCK_HEADER_SZ);
     
-    if (lastBlock != null)
+    if (lastBlock != NULL)
     {
         lastBlock->next = newBlock;
     }
@@ -227,11 +277,6 @@ mblock_t* growHeapBySize(size_t size)
         memoryList.head = newBlock;
     }
     return newBlock;
-}
-
-size_t max(size_t a, size_t b)
-{
-    return (a > b) ? a : b;
 }
 
 void printMemList(const mblock_t* head) {
